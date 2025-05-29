@@ -10,13 +10,14 @@ import atexit
 import tempfile
 import shutil
 import zipfile
+from pathlib import Path
 
 
 # Setup constants
 if not os.path.exists("VIT"):
     gdown.download_folder("https://drive.google.com/drive/folders/1rPSmx28DGFKN-lAN2gTosglsZigJoSzZ?usp=drive_link", output="VIT", quiet=False, use_cookies=False)
-MODEL_DIR = "VIT"
-PROCESSOR_DIR = "VIT/saved_processor"
+MODEL_DIR = "vit"
+PROCESSOR_DIR = "vit_processor"
 
 if "saved_crops_dir" not in st.session_state:
     st.session_state.saved_crops_dir = tempfile.mkdtemp()
@@ -95,6 +96,25 @@ def predict_image(classifier, image):
     """
     return classifier(image, top_k=3)
 
+if 'compare' not in st.session_state:
+    st.session_state.compare = 0
+if 'selected_img' not in st.session_state:
+    st.session_state.selected_img = 0
+
+def reset_selected_img():
+    st.session_state.selected_img = 0
+
+def compare1():
+    st.session_state.compare = 1
+def compare2():
+    st.session_state.compare = 2
+def compare3():
+    st.session_state.compare = 3
+
+def compare(i):
+    st.session_state.compare = i
+    reset_selected_img()
+
 # Page setup
 st.set_page_config(page_title="Seal Identifier 🦭", layout="centered")
 st.title("Seal Individual Identifier 🦭")
@@ -158,9 +178,49 @@ if uploaded_files:
 
         st.markdown("### 🔍 Top Predictions:")
         st.text("Formatted as: {Seal individual} with confidence {score of confidence}")
-        for pred in predictions:
-            conf_score = pred['score'] * 100
-            st.write(f"- **{pred['label']}** with confidence **{conf_score:.0f}**%")
+
+        conf_score = predictions[0]['score'] * 100
+        st.button(f"- **{predictions[0]['label']}** with confidence **{conf_score:.0f}**%", on_click=compare1)
+
+        conf_score = predictions[1]['score'] * 100
+        st.button(f"- **{predictions[1]['label']}** with confidence **{conf_score:.0f}**%", on_click=compare2)
+
+        conf_score = predictions[2]['score'] * 100
+        st.button(f"- **{predictions[2]['label']}** with confidence **{conf_score:.0f}**%", on_click=compare3)
+
+        if st.session_state.compare > 0:
+
+            selected_label = str(int(predictions[st.session_state.compare-1]['label']))
+            train_folder = Path(f"./storage/date_split/{selected_label}/train")
+            dev_folder = Path(f"./storage/date_split/{selected_label}/dev")
+
+            train_files = list(train_folder.glob("*"))
+            dev_files = list(dev_folder.glob("*"))
+
+            all_files = train_files + dev_files
+
+            image1 = cropped_image
+            image2 = Image.open(all_files[st.session_state.selected_img])
+
+            def next_image():
+                st.session_state.selected_img += 1
+            def prev_image():
+                st.session_state.selected_img -= 1
+
+            col1, col2, col3, col4 = st.columns(4)
+            with col3:
+                st.button("Previous Image", on_click=prev_image)
+            with col4:
+                st.button("Next Image", on_click=next_image)
+
+            # Display images side by side
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.image(image1, caption="Unidentified Seal", use_container_width=True)
+
+            with col2:
+                st.image(image2, caption=f"Seal {selected_label}", use_container_width=True)
 
         prediction_options = [
             f"{pred['label']} ({pred['score']*100:.0f}%)"
